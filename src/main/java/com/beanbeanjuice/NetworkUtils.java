@@ -4,7 +4,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -18,18 +20,26 @@ public class NetworkUtils {
             .build();
 
     public static CompletableFuture<Response> pull(String url) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+        URI uri = URI.create(url);
+
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(uri)
                 .header("Accept", "application/json")
                 .timeout(REQUEST_TIMEOUT)
-                .GET()
-                .build();
+                .GET();
+
+        String userInfo = uri.getUserInfo();
+        if (userInfo != null && !userInfo.isEmpty()) {
+            String encoded = Base64.getEncoder().encodeToString(userInfo.getBytes(StandardCharsets.UTF_8));
+            builder.header("Authorization", "Basic " + encoded);
+        }
+
+        HttpRequest request = builder.build();
 
         long now = System.currentTimeMillis();
 
         return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply((response) -> {
             long elapsed = System.currentTimeMillis() - now;
-
             return new Response((int) elapsed, response.statusCode());
         }).exceptionally((e) -> {
             System.out.println("Error contacting service.");
