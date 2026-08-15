@@ -1,18 +1,23 @@
-FROM eclipse-temurin:25-jdk-alpine AS build
+FROM gradle:jdk25 AS build
+
 WORKDIR /app
+COPY . ./
 
-COPY gradlew settings.gradle.kts build.gradle.kts ./
-COPY gradle ./gradle
-RUN ./gradlew --no-daemon dependencies
+RUN chmod +x ./gradlew
+RUN gradle shadowJar
 
-COPY src ./src
-RUN ./gradlew --no-daemon shadowJar
+FROM eclipse-temurin:25-jre AS runtime
 
-FROM eclipse-temurin:25-jre-alpine
+ARG UID=1001
+ARG GID=1001
+RUN groupadd -g ${GID} appuser \
+    && useradd -l -u ${UID} -g ${GID} -m appuser
+
 WORKDIR /app
-
-RUN addgroup -S sidecar && adduser -S sidecar -G sidecar
 COPY --from=build /app/build/libs/*.jar app.jar
+
 USER sidecar
+
+ENV JAVA_OPTS="-Xmx3G"
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
